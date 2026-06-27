@@ -1,0 +1,89 @@
+name: Agent Review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute diff
+        run: git diff "origin/${{ github.base_ref }}...HEAD" > pr.diff
+
+      - name: Request review from Worker
+        env:
+          WORKER_URL: ${{ vars.PR_REVIEWER_URL }}
+          WORKER_TOKEN: ${{ secrets.PR_REVIEWER_TOKEN }}
+        run: |
+          set +e
+          jq -n --rawfile diff pr.diff \
+            --arg repo "${{ github.repository }}" \
+            --argjson number ${{ github.event.pull_request.number }} \
+            --arg sha "${{ github.event.pull_request.head.sha }}" \
+            '{diff:$diff, meta:{repo:$repo, number:$number, headSha:$sha}}' > payload.json
+          # Advisory/non-blocking: bound the call and fall back to an empty review on any failure.
+          curl -fsS --max-time 180 -X POST "$WORKER_URL/review" \
+            -H "Authorization: Bearer $WORKER_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data @payload.json -o result.json
+          if [ ! -s result.json ]; then echo '{"summary":"","comments":[]}' > result.json; fi
+          exit 0
+
+      - name: Post review
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const MARKER = '<!-- verstand-agent-reviewer -->';
+            let payload;
+            try { payload = JSON.parse(fs.readFileSync('result.json', 'utf8')); }
+            catch { core.info('No parseable result; skipping.'); return; }
+            const { summary, comments = [] } = payload;
+            if (!summary && comments.length === 0) { core.info('Nothing to post.'); return; }
+
+            const { owner, repo } = context.repo;
+            const pull_number = context.payload.pull_request.number;
+
+            // All posting is advisory: never fail the job on a GitHub API error.
+            try {
+              // Idempotency: delete this bot's prior inline review comments from earlier runs.
+              const existing = await github.paginate(github.rest.pulls.listReviewComments, { owner, repo, pull_number });
+              for (const c of existing) {
+                if (c.body && c.body.includes(MARKER)) {
+                  await github.rest.pulls.deleteReviewComment({ owner, repo, comment_id: c.id });
+                }
+              }
+
+              // Post inline findings as a single review (only when there are comments).
+              if (comments.length > 0) {
+                const reviewComments = comments.map((c) => ({
+                  path: c.path,
+                  line: c.line,
+                  side: c.side || 'RIGHT',
+                  body: `${MARKER}\n${(c.agents || []).join(', ')}${c.agreement ? ` · ${c.agreement.length} model(s)` : ''}\n\n${c.body}`,
+                }));
+                await github.rest.pulls.createReview({ owner, repo, pull_number, event: 'COMMENT', comments: reviewComments });
+              }
+
+              // Idempotency: upsert the summary as a single PR comment (update in place, else create).
+              if (summary) {
+                const body = `${MARKER}\n${summary}`;
+                const issueComments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pull_number });
+                const prior = issueComments.find((c) => c.body && c.body.includes(MARKER));
+                if (prior) {
+                  await github.rest.issues.updateComment({ owner, repo, comment_id: prior.id, body });
+                } else {
+                  await github.rest.issues.createComment({ owner, repo, issue_number: pull_number, body });
+                }
+              }
+            } catch (e) {
+              core.warning(`Agent review posting failed (advisory, non-blocking): ${e.message}`);
+            }
