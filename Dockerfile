@@ -1,5 +1,14 @@
+FROM node:22.23.5-bookworm-slim AS patched-node
+FROM oven/bun:1.4.4-debian AS patched-bun
+
 # Use official Cloudflare sandbox base image
 FROM docker.io/cloudflare/sandbox:0.6.5
+
+# Keep the SDK image, but replace its EOL Node 20 and floating Bun tools.
+COPY --from=patched-node /usr/local/bin/node /usr/local/bin/node
+COPY --from=patched-node /usr/local/lib/node_modules /usr/local/lib/node_modules
+COPY --from=patched-bun /usr/local/bin/bun /usr/local/bin/bun
+RUN node --version && npm --version && bun --version
 
 # Install system dependencies (rarely change - cached layer)
 RUN apt-get update && apt-get install -y --no-install-recommends \
