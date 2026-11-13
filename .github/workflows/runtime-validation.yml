@@ -27,4 +27,4 @@ jobs:
       # This only builds tooling and checks versions. Never invoke the Bonk
       # action, an agent, a provider, or publish an image.
       - run: docker build --pull -t runtime-validation .
-      - run: docker run --rm runtime-validation sh -c 'test "$(node --version)" = v22.23.5 && test "$(bun --version)" = 1.4.4 && npm --version'
+      - run: docker run --rm --entrypoint sh runtime-validation -c 'test "$(node --version)" = v22.23.5 && test "$(bun --version)" = 1.4.4 && npm --version'

@@ -19,8 +19,13 @@ for (const required of [
   "FROM node:22.23.5-bookworm-slim AS patched-node",
   "FROM oven/bun:1.4.4-debian AS patched-bun",
   "COPY --from=patched-node /usr/local/bin/node /usr/local/bin/node",
-  "COPY --from=patched-node /usr/local/lib/node_modules /usr/local/lib/node_modules",
+  "COPY --from=patched-node /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm",
   "COPY --from=patched-bun /usr/local/bin/bun /usr/local/bin/bun",
 ]) {
   if (!dockerfile.includes(required)) throw new Error(`Missing patched sandbox runtime: ${required}`);
+}
+
+const workflow = await Bun.file(".github/workflows/runtime-validation.yml").text();
+if (!workflow.includes("docker run --rm --entrypoint sh runtime-validation")) {
+  throw new Error("Runtime check must override the sandbox entrypoint");
 }

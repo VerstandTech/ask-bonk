@@ -6,7 +6,7 @@ FROM docker.io/cloudflare/sandbox:0.6.5
 
 # Keep the SDK image, but replace its EOL Node 20 and floating Bun tools.
 COPY --from=patched-node /usr/local/bin/node /usr/local/bin/node
-COPY --from=patched-node /usr/local/lib/node_modules /usr/local/lib/node_modules
+COPY --from=patched-node /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
 COPY --from=patched-bun /usr/local/bin/bun /usr/local/bin/bun
 RUN node --version && npm --version && bun --version
 
