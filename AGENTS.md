@@ -145,7 +145,7 @@ mentions.skip != true  AND  preflight.skip != true  [AND additional per-step con
 | Step | Condition | Key Behavior |
 |------|-----------|--------------|
 | 1. Check mentions | always | Matches comment body against trigger phrases; short-circuits workflow on miss |
-| 2. Setup bun | mentions passed | Installs bun 1.3 |
+| 2. Setup bun | mentions passed | Installs bun 1.4.4 |
 | 3. Pre-flight orchestration | mentions passed | Single `bun run orchestrate.ts` consolidating 7 formerly separate steps |
 | 4. Install opencode | preflight passed | `bun install -g opencode-ai@latest` |
 | 5. Configure Git | preflight passed | Sets bot identity, **replaces git credential with App token** |
