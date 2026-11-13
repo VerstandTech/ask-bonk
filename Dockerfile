@@ -6,6 +6,8 @@ FROM docker.io/cloudflare/sandbox:0.6.5
 
 # Keep the SDK image, but replace its EOL Node 20 and floating Bun tools.
 COPY --from=patched-node /usr/local/bin/node /usr/local/bin/node
+# COPY merges directories: remove only npm to avoid stale npm dependencies.
+RUN rm -rf /usr/local/lib/node_modules/npm
 COPY --from=patched-node /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
 COPY --from=patched-bun /usr/local/bin/bun /usr/local/bin/bun
 RUN node --version && npm --version && bun --version
@@ -30,7 +32,7 @@ RUN curl -fsSL https://opencode.ai/install -o /tmp/install-opencode.sh \
     && opencode --version
 
 # Install global Node.js tools (cached layer)
-RUN npm install -g \
+RUN npm install --loglevel verbose -g \
     typescript \
     tsx \
     && npm cache clean --force
